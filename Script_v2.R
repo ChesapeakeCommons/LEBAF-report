@@ -49,32 +49,55 @@ CondReference <- read_sheet(SheetURL, sheet = "ConductivityReference")
 ## Creating master list of thresholds for passing into Table Maker
 ThresholdList <- list(DO_Cold,DO_Warm,TempWarm,TempCold,CondThreshold,pHThreshold,TDSThreshold,ChlorideThreshold)
 
-## Pulling in Station Reference Data ## 
+## Pulling in Station Reference Data ##
+## TO ADD DATA as of 10-28-2022
+## 1) Add reference sheet !! Please follow formatting !! - stored in this gsheet - "https://docs.google.com/spreadsheets/d/1zrSc_Cd2-V1k73lE3TrqX-QqYJkt117AMAb-O-kuhsA" 
+## 2) Download data from Water Reporter and store in /Data/ of working directory Folder 
+## 3) Add Import 
+## 4) Add Cleaning Section 
+## 5) Add Group name and dataframe to GroupData 
+## 6) Run full scropt (ctrl A and click 'Run')
+
+## Adding refernce data 
+## Step 1) 
 HuronReference <- read_sheet(SheetURL, sheet = "HuronReference")%>%
                   select(-c(station_name))
+SUNYReference <- read_sheet(SheetURL, sheet = "SUNYReference")%>%
+                  select(-c(station_name))
+DoanReference <- read_sheet(SheetURL, sheet = "DoanReference")%>%
+                  select(-c(station_name))
+BuffaloReference <- read_sheet(SheetURL, sheet = "BuffaloNiagaraReference")%>%
+                  select(-c(station_name))
+ClintonReference <- read_sheet(SheetURL, sheet = "ClintonReference")%>%
+                     select(-c(station_name))
 
 
-## Importing Water Quality Data from HURON ### 
+
+## Importing Water Quality Data from Water Reporter ### 
+## Step 2) and Step 3) 
 HuronRaw <- read.csv("Data/WaterReporterData2022/Huron_10_20_2022.csv")
-
-## Importing Water Quality Data from Doan Brok ### 
-DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_10_26_2022")
-
+SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_10_27_2022.csv")
+DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_10_26_2022.csv")
+BuffaloRaw <- read.csv("Data/WaterReporterData2022/Buffalo_10_28_2022.csv")
+ClintonRaw <- read.csv("Data/WaterReporterData2022/ClintonWC_10_28_2022.csv")
 ### END DATA IMPORT ### 
 
 
 ### DATA CLEANING #### 
-
-## Cleaning Huron Data ## 
+## Step 3) 
+## The only thing you need to really change is the 'left_join' at the end, and the exact parameter column names for the rename Tip: type colnames(DataRaw)
+## Cleaning Data ## 
 ## Changing annoying column stuff ## 
 ## Notes 
 ##  - Conductivity is in uS/cm - microsiemens per centimeter
-##  - Missing percent saturation data 
-##  - For 10.26.22 Meeting, Are these conversions correct for Conductivity?
 ## Calculating TDS ##
 ## Calculating Salinity ## 
 ## Calculating Chloride ## 
 ## Turning date into date format 
+
+### Cleaning Huron Data ### 
+## QA/QC Notes 
+## High DO and pH
 HuronCleaned <- HuronRaw %>%
                 dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3546.,
                        "Conductivity" = Conductivity..p.3545.,
@@ -94,8 +117,90 @@ HuronStations <- HuronCleaned%>%
                  select(station_name,station_id)%>%
                  distinct(station_name, .keep_all = TRUE)
 
-### END DATA CLEANING ### 
+### Cleaning SUNY Data ###
+## QA/QC Notes 
+## High DO and low Conductivity (TDS, Salinity, Chloride by extension)
+SUNYCleaned <- SUNYRaw %>% 
+                dplyr::rename("Dissolved Oxygen" = Dissolved.Oxygen..p.1523.,
+                              "Conductivity" = Conductivity..p.3431.,
+                              "Water Temperature" = Water.Temperature..p.1521.,
+                              "pH" = pH..p.1522.)%>%
+                select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+                mutate(TDS = Conductivity*.55)%>%
+                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+                mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+                filter(collection_date > ymd("2022-03-01"))%>%
+                filter(collection_date < ymd("2022-11-01"))%>%
+                left_join(SUNYReference, by = "station_id")%>%
+                filter(!is.na(Temp))
+
+### Cleaning Doan Data ### 
+DoanCleaned <- DoanRaw %>%
+               dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3502.,
+                "Conductivity" = Conductivity..p.3501.,
+                "Water Temperature" = Temperature..water..p.3503.,
+                "pH" = pH..p.3500.)%>%
+                select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+                mutate(TDS = Conductivity*.55)%>%
+                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+                mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+                mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
+                filter(collection_date > ymd("2022-03-01"))%>%
+                filter(collection_date < ymd("2022-11-01"))%>%
+                left_join(DoanReference, by = "station_id")%>%
+                filter(!is.na(Temp))
+
+### Cleaning Buffalo Data ### 
+BuffaloCleaned <- BuffaloRaw %>%
+  dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3487.,
+                "Conductivity" = Conductivity..p.3486.,
+                "Water Temperature" = Temperature..water..p.3488.,
+                "pH" = pH..p.3485.)%>%
+  select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+  mutate(TDS = Conductivity*.55)%>%
+  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+  mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+  mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
+  filter(collection_date > ymd("2022-03-01"))%>%
+  filter(collection_date < ymd("2022-11-01"))%>%
+  left_join(BuffaloReference, by = "station_id")%>%
+  filter(!is.na(Temp))
+
+ClintonCleaned <- ClintonRaw %>%
+dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3512.,
+              "Conductivity" = Conductivity..p.3511.,
+              "Water Temperature" = Temperature..water..p.3513.,
+              "pH" = pH..p.3510.)%>%
+ select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+  mutate(TDS = Conductivity*.55)%>%
+  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+  mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+  mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
+  filter(collection_date > ymd("2022-03-01"))%>%
+  filter(collection_date < ymd("2022-11-01"))%>%
+  left_join(ClintonReference, by = "station_id")%>%
+  filter(!is.na(Temp))
+
+
+## Step 4)
+## Creating Array of Group Data ##
+## !! The GroupDataSource List and GroupName var need to be the same group order !! 
+GroupDatasource <- list(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned, ClintonCleaned)
+GroupName <- c("Huron River Watershed Council", "SUNY Fredonia", "Doan Brook Watershed Partnership","Buffalo Niagara Waterkeeper", "Clinton River Watershed Council")
+GroupData <- data.frame(GroupName)
+GroupData$GroupDatasource <- GroupDatasource
+
+
             
+
+### END DATA CLEANING ### 
+
+
+
 #### VIZUALIZATIONS #### 
 ## TO DO: Add conductivity table 
 ## Make charts stylistically consistent 
@@ -106,7 +211,7 @@ HuronStations <- HuronCleaned%>%
 # Function for generating data table
 TableDataMaker <- function(inputDF,station)
 {
-  print(inputDF)
+
   df <- inputDF %>%
     filter(station_name == station)%>%
     select_if(is.numeric)
@@ -129,12 +234,33 @@ TableDataMaker <- function(inputDF,station)
 
 ## Table Loop ##
 
-TableMaker <- function(df, inStation_name, inThresholds)
+TableMaker <- function(df, inStation_name, inThresholds, Name)
 {
+  
+  df <- df %>%
+    relocate(c(`Dissolved Oxygen`,`Water Temperature`,Conductivity, TDS, pH, Chloride, Salinity))
+  
+  ### Warm vs. Cold Thresholds Logic ##   
+  StreamTemp <- df %>%
+               slice(1)%>%
+               pull(Temp)
+
+  ## Handling for Cold vs Warm
+  if(StreamTemp == "Warm")
+  {
+  TempThreshold <- inThresholds[[3]]
+  DOThreshold <- inThresholds[[2]]
+  }
+  else
+  {
+  TempThreshold <- inThresholds[[4]]
+  DOThreshold <- inThresholds[[1]]
+  }
+  
   ## Joining in Water Thresholds 
   ## TO DO: Add logic for Warm vs Cold Water
-  WaterThreshold <- inThresholds[[3]]%>%
-    mutate(Month = month(Month))
+  WaterThreshold <- TempThreshold %>%
+                    mutate(Month = month(Month))
   
   ## Exceedence table for Water
   Water_Ex <- df %>%
@@ -144,34 +270,42 @@ TableMaker <- function(df, inStation_name, inThresholds)
     mutate(Water_Ex = ifelse(`Water Temperature` > LowerBound & `Water Temperature` < UpperBound,0,1))%>%
     pull(Water_Ex)
   
-  ## All other vars and pulling in Water
+  ## All other vars and pulling in Water Exceedence
   ExceedTable <- df %>%
                 select(-c(collection_date,station_id,station_name))%>%
                 ## Temp warm vs Temp Cold logic here ## 
-                 mutate(DO_Ex = ifelse(`Dissolved Oxygen` > as.numeric(inThresholds[[2]][1,2]),0,1)) %>% 
+                 mutate(DO_Ex = ifelse(`Dissolved Oxygen` > as.numeric(DOThreshold[1,2]),0,1)) %>% 
                  mutate(Cond_Ex = ifelse(Conductivity < as.numeric(inThresholds[[5]][1,2]) & Conductivity > as.numeric(inThresholds[[5]][3,2]),0,1))%>%
                  mutate(Water_Ex = Water_Ex)%>%
                  mutate(pH_Ex = ifelse(pH < as.numeric(inThresholds[[6]][1,2]) & pH > as.numeric(inThresholds[[6]][3,2]),0,1))%>%
                  mutate(TDS_Ex = ifelse(TDS >= as.numeric(inThresholds[[7]][3,2]),1,0))%>%
                  mutate(Chloride_Ex = ifelse(Chloride >= as.numeric(inThresholds[[8]][4,2]),1,0))%>%
                  mutate(Salinity_Ex = NA)%>%
-                 select(c(DO_Ex,Cond_Ex,Water_Ex,pH_Ex,TDS_Ex,Salinity_Ex,Chloride_Ex))%>%
+                 select(c(DO_Ex,Water_Ex,Cond_Ex,TDS_Ex,pH_Ex,Chloride_Ex,Salinity_Ex))%>%
                  summarise_all(.,~sum(.x,na.rm = TRUE))
   
   ## a little cleaning 
   ExceedTable <- as.data.frame(t(ExceedTable))%>%
                  dplyr::rename(NumExceed = V1)%>%
-                 mutate(PerExceed = as.character(round(NumExceed / nrow(df),3)*100))%>%
-                 remove_rownames()
+                 mutate(PerExceed = as.character(round(NumExceed / nrow(df),3)*100))
   
-  ## Joining to other data 
+  ## Adding units 
+  df <- df %>%
+        dplyr::rename("Chloride - mg/L" = Chloride,
+                  "Conductivity - uS/cm" = Conductivity,
+                  "Dissolved Oxygen - mg/L" = `Dissolved Oxygen`,
+                  "Salinity - ppm" = Salinity,
+                  "Total Dissolved Solids - mg/L" = TDS,
+                  "Water Temperature - C" =  `Water Temperature`)
+  
+  ## Joining to other data and creating table 
   Table <- data.frame(TableDataMaker(df,inStation_name)) %>%
     tibble::rownames_to_column(., "Parameter") %>%
-    mutate(`# Exceedence` = ExceedTable$NumExceed)%>%
-    mutate(`% Exceedence` = ExceedTable$PerExceed)%>%
+    mutate(`N Exceed` = ExceedTable$NumExceed)%>%
+    mutate(`% Exceed` = paste0(ExceedTable$PerExceed, "%"))%>%
     gt()%>%
-    tab_source_note(source_note = paste("Data from Huron River Watershed Council:", min(df$collection_date), " to ",max(df$collection_date)))%>%
-    tab_header(title = paste(inStation_name, "Station", "Water Quality Summary Statistics"))%>%
+    tab_source_note(source_note = paste(Name, min(df$collection_date), " to ",max(df$collection_date)))%>%
+    tab_header(title = paste(inStation_name, "Station", "Water Quality Summary Statistics -", nrow(df), "Samples"))%>%
 
     tab_style(
       style = list(
@@ -183,70 +317,76 @@ TableMaker <- function(df, inStation_name, inThresholds)
         cell_text(weight = "bold")),
       locations = cells_column_labels(columns = everything())
     )
+  print("Done Summary Chart")
   return(Table)
 }
 
-Table <- TableMaker(HuronCleaned,"Broadway St.", ThresholdList)
+#Table <- TableMaker(HuronCleaned %>% filter(station_name == "Michigan Avenue" ),"Michigan Avenue", ThresholdList, "Name")
 ### END TABLES ### 
 
 ## Box and Whisker ## 
-BoxPlotMaker <- function(df,inStation_name)
+BoxPlotMaker <- function(df,inStation_name, Name)
     {
     ChartData <- df %>%
+                 dplyr::rename("Chloride - mg/L" = Chloride,
+                        "Conductivity - uS/cm" = Conductivity,
+                        "Dissolved Oxygen - mg/L" = `Dissolved Oxygen`,
+                        "Salinity - ppm" = Salinity,
+                        "Total Dissolved Solids - mg/L" = TDS,
+                        "Water Temperature - C" =  `Water Temperature`)%>%
                  filter(station_name == inStation_name)%>%
                  select_if(is.numeric)%>%
                  gather()
 
    plot <- ggplot() +
-           geom_boxplot(data = ChartData, aes(y = value)) +
+           geom_boxplot(data = ChartData, aes(y = value, fill = key), width = .25) +
            facet_wrap(~ key, scales = "free")+
            scale_x_discrete() +
-           labs(title = paste("Huron River Watershed Council:", inStation_name, "Station Summary Plots"),
+           labs(title = paste(Name, inStation_name, "Station Summary Plots"),
                 subtitle = paste("Data from:", min(df$collection_date), "to",max(df$collection_date)))+
            theme_classic()+
+            theme(legend.position="none") +
            ylab("")
    
     return(plot)
 }
 
-BoxPlotMaker(HuronCleaned,"Shetland Dr.")
+#BoxPlotMaker(HuronCleaned,"Shetland Dr.")
 
 ## END BOX AND WHISKER ## 
 
 ## Temperature Chart ## 
-TempChartMaker <- function(inGroup_data, inStation_name, inTresholds)
+TempChartMaker <- function(inGroup_data, inStation_name, inTresholds, Name)
 {
   
   ChartData <- inGroup_data 
-
-plot <-  ggplot()+
-  geom_line(data = inTresholds, aes(x = Month, y = UpperBound,color =  "#fc090a"))+
-  geom_line(data = inTresholds, aes(x = Month, y = LowerBound, color = "#0533ff"))+
-  geom_ribbon(data = inTresholds, aes(x = Month, ymin=LowerBound,ymax=UpperBound), fill="#1aaf54", alpha=0.25)+
-  scale_color_manual(name = "",
-                     breaks=c('Threshold'),
-                     values=c('Threshold'='#1aaf54'))+
+  
+  plot <-  ggplot()+
+    geom_line(data = inTresholds, aes(x = Month, y = LowerBound, color = "#0533ff"))+
+    geom_line(data = inTresholds, aes(x = Month, y = UpperBound,color =  "#fc090a"), key_glyph = "rect")+
+    geom_ribbon(data = inTresholds, aes(x = Month, ymin=LowerBound,ymax=UpperBound), fill="#1aaf54", alpha=0.25)+
+    scale_color_manual(name = "", values=c('Threshold'='#1aaf54'))+
     geom_point(data = ChartData, aes(x=collection_date, y =`Water Temperature`), shape = 21, fill = "#b3b3b3", size = 3)+
     theme_classic()+
     ylab("Water Temperature C")+
     xlab("")+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Water Temperature - C"),
+    labs(title = paste(Name, inStation_name, "Station", "Water Temperature - C"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Threshold generated from LEBAF standards")+
-   ylim(0,max(ChartData$`Water Temperature`)*1.3)
+    ylim(0,34)
   
-
+  
   return(plot)
 }
 
-TempChartMaker(HuronCleaned, "Chalmers", TempCold)
+#TempChartMaker(DoanCleaned %>% filter(station_name =="Rockefeller Lagoon" ), "RL", TempWarm, "Test")
 
 ### END TEMP CHART ### 
 ## Threshold Charts ##
 
 ## Dissolved Oxygen ## 
 ## TO DO add logic for determining warm or cold 
-DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data)
+DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data, Name)
   {
   ChartData <- inGroup_data %>%
     mutate(Color = as.character(inThreshold_data[1,1]))%>%
@@ -263,7 +403,7 @@ DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data)
     xlab("")+
     ylab("Dissolved Oxygen - mg/L")+
     scale_color_manual(name = 'Thresholds', values = ThresholdColors)+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Dissolved Oxygen - mg/L"),
+    labs(title = paste(Name, inStation_name, "Station", "Dissolved Oxygen - mg/L"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Threshold generated from LEBAF standards.")+
     ylim(0,max(ChartData$`Dissolved Oxygen` *1.2))
@@ -271,12 +411,12 @@ DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data)
   return(plot)
 }
 
-DOChartMaker(HuronCleaned, "N. Territorial Rd.",DO_Warm)
+#DOChartMaker(HuronCleaned %>% filter(station_name == "N. Territorial Rd."), "N. Territorial Rd.",DO_Warm, "Nick Conklin")
 ### END DISSOLVED OXYGEN ### 
 
 
 ### Temperature Vs. Dissolved Oxygen ## 
-Temp_DO_ChartMaker <- function(inGroup_data, inStation_name)
+Temp_DO_ChartMaker <- function(inGroup_data, inStation_name, Name)
 {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>% 
@@ -284,36 +424,37 @@ Temp_DO_ChartMaker <- function(inGroup_data, inStation_name)
     filter(collection_date < ymd("2022-11-01"))%>%
     filter(!is.na(`Water Temperature`))%>%
     filter(!is.na(`Dissolved Oxygen`))
-  
+
 plot <-  ggplot(data = ChartData, aes(x = collection_date))+
-    geom_smooth(aes(y=`Water Temperature`), se = FALSE, color = "#da222b", alpha = .1)+
-    geom_point(aes(y=`Water Temperature`),fill = "#da222b", size = 1.5, alpha = .75, shape = 21,color = "black")+
-    geom_smooth(aes(y=`Dissolved Oxygen`), se = FALSE, color = "#0098d8", alpha = .1)+
-    geom_point(aes(y=`Dissolved Oxygen`),fill = "#0098d8", size = 1.5, alpha = .75, shape = 21, color = "black")+
+    geom_smooth(aes(y=`Water Temperature`), se = FALSE, color = "#f53e46", alpha = .1)+
+    geom_point(aes(y=`Water Temperature`),color = "#f53e46")+
+    geom_smooth(aes(y=`Dissolved Oxygen`), se = FALSE, color = "#1aaf54", alpha = .1)+
+    geom_point(aes(y=`Dissolved Oxygen`),color = "#1aaf54")+
     theme_classic()+
-  
+    xlab("")+
     scale_y_continuous(
       name = "Water Temperature C",
       sec.axis = sec_axis(~., name="Dissolved Oxygen - mg/L"))+
     theme(
       axis.title.y = element_text(size=13),
-      axis.text.y = element_text(color = "#da222b", size = 10),
+      axis.text.y = element_text(color = "#f53e46", size = 10),
       axis.title.y.right = element_text(size=13, vjust = 4),
-      axis.text.y.right = element_text(color = "#0098d8", size = 10),
+      axis.text.y.right = element_text(color = "#1aaf54", size = 10),
       axis.title.x = element_text(size = 13),
       axis.text.x = element_text(size = 10),
       plot.margin = unit(c(1,1,1,1),"cm"))+
-      labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Temperature and Dissolved Oxygen"),
+      labs(title = paste(Name, inStation_name, "Station", "Temperature and Dissolved Oxygen"),
        subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)))
+
   return(plot)
 }
 
-Temp_DO_ChartMaker(HuronCleaned, "Broadway St.")
+#Temp_DO_ChartMaker(BuffaloCleaned %>% filter(station_id == "OH05"), "Outer Harbor @ Wilkeson Point", Name)
 ### End Temperature and Dissolved Oxygen  ### 
 
 ### Temperature Vs. pH ## 
 ## Recommend not doing this chart!! ##
-Temp_pH_ChartMaker <- function(inGroup_data, inStation_name)
+Temp_pH_ChartMaker <- function(inGroup_data, inStation_name, Name)
 {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>% 
@@ -323,35 +464,35 @@ Temp_pH_ChartMaker <- function(inGroup_data, inStation_name)
     filter(!is.na(pH))
   
   plot <-  ggplot(data = ChartData, aes(x = collection_date))+
-    geom_smooth(aes(y=`Water Temperature`), se = FALSE, color = "#da222b", alpha = .1)+
-    geom_point(aes(y=`Water Temperature`),fill = "#da222b", size = 1.5, alpha = .75, shape = 21,color = "black")+
+    geom_smooth(aes(y=`Water Temperature`), se = FALSE, color = "#f53e46", alpha = .1)+
+    geom_point(aes(y=`Water Temperature`),color = "#f53e46")+
     geom_smooth(aes(y=pH), se = FALSE, color = "#38761d", alpha = .1)+
-    geom_point(aes(y=pH),fill = "#38761d", size = 1.5, alpha = .75, shape = 21, color = "black")+
+    geom_point(aes(y=pH),color = "#38761d")+
     theme_classic()+
-    
+    xlab("")+
     scale_y_continuous(
       name = "Water Temperature C",
       sec.axis = sec_axis(~., name="pH"))+
     theme(
       axis.title.y = element_text(size=13),
-      axis.text.y = element_text(color = "#da222b", size = 10),
+      axis.text.y = element_text(color = "#f53e46", size = 10),
       axis.title.y.right = element_text(size=13, vjust = 4),
       axis.text.y.right = element_text(color = "#38761d", size = 10),
       axis.title.x = element_text(size = 13),
       axis.text.x = element_text(size = 10),
       plot.margin = unit(c(1,1,1,1),"cm"))+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Temperature and pH"),
+    labs(title = paste(Name, inStation_name, "Station", "Temperature and pH"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)))
   return(plot)
 }
 
-Temp_pH_ChartMaker(HuronCleaned, "Broadway St.")
+#Temp_pH_ChartMaker(HuronCleaned, "Broadway St.")
 ### End Temperature and pH ### 
 
 
 ## Conductivity ## 
 ## FIXED ## 
-CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
+CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
    {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>%
@@ -373,7 +514,7 @@ CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
     xlab("")+
     ylab("Conductivity - uS/cm")+
     scale_color_manual(name = 'Thresholds', values = ThresholdColors)+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Conductivity"),
+    labs(title = paste(Name, inStation_name, "Station", "Conductivity"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Threshold generated from LEBAF standards.")+
     ylim(0,max(ChartData$Conductivity *1.2))
@@ -382,13 +523,13 @@ CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
   }
 
 ## Testing 
-CondChartMaker(HuronCleaned, "N. Territorial Rd.", CondThreshold)
+#CondChartMaker(HuronCleaned, "N. Territorial Rd.", CondThreshold)
 ## End Conductivity 
 
 
 ## Conductivity Boxplot W/ Reference and Survery Sites ## 
 ## TO DO: Add legened point ## 
-CondBoxplotMaker <- function(inGroup_data, inStation_name, inThreshold_data)
+CondBoxplotMaker <- function(inGroup_data, inStation_name, inThreshold_data,Name)
   {
   
   ChartData <- inGroup_data %>%
@@ -407,10 +548,16 @@ CondBoxplotMaker <- function(inGroup_data, inStation_name, inThreshold_data)
                 rbind(CondRefBox)
 Legend <- c("Reference" = "#0098d8","Survey" = "#1aaf54")
 
+CondMedian <- c(median(ChartData$Conductivity),median(ChartData$Conductivity))
+StreamType <- c("Reference","Survey")
+CondMedianChart <- data.frame(CondMedian,StreamType)
+
+
 plot <-  ggplot() +
               geom_boxplot(data = CondSurvBox,  aes(x = StreamType, ymin = 400, lower = x25, middle = x50,upper = x75, ymax = x90, fill = StreamType), stat = "identity")+              
               geom_point(data = ChartData, aes(y=Conductivity, x = StreamType), size = 3, color = "Black")+
-              labs(title = paste("Huron River Watershed Council:", inStation_name, "Conductivity and Control Sites"),
+              geom_point(data = CondMedianChart, aes(y=CondMedian, x = StreamType), size = 4, color = "#f53e46")+
+              labs(title = paste(Name, inStation_name, "Conductivity and Control Sites"),
               subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)))+
               theme_classic()+
               ylab("Conductivity - uS/cm")+
@@ -422,11 +569,12 @@ plot <-  ggplot() +
   
   }
 
-CondBoxplotMaker(HuronCleaned, "Broadway St.",CondReference)
+## Testing 
+#CondBoxplotMaker(HuronCleaned %>% filter(station_name == "Broadway St."), "Broadway St.",CondReference)
 
 
 ## PH ## 
-pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
+pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 {
   
   ChartData <- inGroup_data %>%
@@ -446,7 +594,7 @@ pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
     xlab("")+
     ylab("pH")+
     scale_color_manual(name = 'Thresholds', values = ThresholdColors)+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "pH"),
+    labs(title = paste(Name, inStation_name, "Station", "pH"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Threshold generated from LEBAF standards.")+
     ylim(0,15)
@@ -456,12 +604,12 @@ pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
 }
 
 ## Testing ## 
-pHChartMaker(HuronCleaned, "Shetland Dr.", pHThreshold)
+#pHChartMaker(HuronCleaned, "Shetland Dr.", pHThreshold)
 ## End pH ##
 
 
 ## TDS ## 
-TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
+TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 {
 
   ChartData <- inGroup_data %>%
@@ -480,9 +628,9 @@ TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
     geom_hline(yintercept=as.numeric(inThreshold_data[1,2]), linetype="dashed", color = as.character(inThreshold_data[1,3]))+
     theme_classic()+
    xlab("")+
-  ylab("TDS")+
+  ylab("Total Dissolved Solids - mg/L")+
   scale_color_manual(name = 'Thresholds', values = ThresholdColors)+
-  labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Total Dissolved Solids"),
+  labs(title = paste(Name, inStation_name, "Station", "Total Dissolved Solids - mg/L"),
        subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
        caption = "Threshold generated from LEBAF standards. TDS was calculated from Conductivity results: TDS = k EC (in 25 °C),")+
   ylim(0,max(ChartData$TDS *1.2))
@@ -491,13 +639,13 @@ TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
 }
 
 ## Testing ## 
-TDS_ChartMaker(HuronCleaned, "Broadway St.", TDSThreshold)
+#TDS_ChartMaker(HuronCleaned, "Broadway St.", TDSThreshold)
 
 ## End TDS ##
 
 
 ## Chloride ##
-Chloride_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
+Chloride_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 {
   ChartData <- inGroup_data %>%
     mutate(Color = as.character(inThreshold_data[4,1]))%>%
@@ -518,7 +666,7 @@ Chloride_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
     xlab("")+
     ylab("Chloride - mg/L")+
     scale_color_manual(name = 'Thresholds', values = ThresholdColors)+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Chloride - mg/L"),
+    labs(title = paste(Name, inStation_name, "Station", "Chloride - mg/L"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Threshold generated from LEBAF standards. Chloride was calculated from Conductivity results: [Cl-] = 4.928 EC")+
     ylim(0,max(ChartData$Chloride *1.2))
@@ -527,13 +675,13 @@ Chloride_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data)
 }
 
 ## Testing ## 
-Chloride_ChartMaker(HuronCleaned, "Broadway St.", ChlorideThreshold)
+#Chloride_ChartMaker(HuronCleaned, "Broadway St.", ChlorideThreshold)
 
 ### End Chloride ###
 
 
 ### Salinity ### 
-Salinity_ChartMaker <- function(inGroup_data, inStation_name)
+Salinity_ChartMaker <- function(inGroup_data, inStation_name, Name)
 {
   ChartData <- inGroup_data %>%
      filter(!is.na(Salinity))
@@ -543,18 +691,17 @@ Salinity_ChartMaker <- function(inGroup_data, inStation_name)
     theme_classic()+
     xlab("")+
     ylab("Salinity - ppm")+
-    labs(title = paste("Huron River Watershed Council:", inStation_name, "Station", "Salinity - ppm"),
+    labs(title = paste(Name, inStation_name, "Station", "Salinity - ppm"),
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)),
          caption = "Salinity was calculated from Conductivity results: S = EC ^ 1.0878 x 0.4665")+
     ylim(0,max(ChartData$Salinity *1.2))
   
   return(plot)
 }
-Salinity_ChartMaker(HuronCleaned, "Broadway St.")
+
+## Testing ## 
+#Salinity_ChartMaker(HuronCleaned, "Broadway St.")
 ### End Salinity ### 
-
-
-
 
 
 
@@ -563,91 +710,129 @@ Salinity_ChartMaker(HuronCleaned, "Broadway St.")
 
 
 #### GENERATING CHARTS #### 
-## TO DO: Add section for looping over multiple groups ###
 ## Looping over stations ## 
-for (row in 1:nrow(HuronStations))
+for (row in 1:nrow(GroupData))
 {
+Datasource <- as.data.frame(GroupData$GroupDatasource[row])
+
+colnames(Datasource) <- gsub('\\.',' ',colnames(Datasource))
+
+Name <- GroupData$GroupName[row]
+
+Stations <-  Datasource %>%
+             select(station_name,station_id)%>%
+             distinct(station_name, .keep_all = TRUE)
+
+for (row in 1:nrow(Stations))
+ {
+  
+print(Stations$station_name[row])
+  
 ## Selecting to the chart data we need 
-ChartData <- HuronCleaned %>%
-             filter(station_name == HuronStations$station_name[row])%>%
+ChartData <- Datasource %>%
+             filter(station_name == Stations$station_name[row])%>%
              filter(collection_date > ymd("2022-03-01"))%>%
              filter(collection_date < ymd("2022-11-01")) 
 
+### Warm vs. Cold Thresholds Logic ##   
+StreamTemp <- ChartData %>%
+              slice(1)%>%
+              pull(Temp)
+
+if(StreamTemp == "Warm")
+{
+  TempThreshold <- TempWarm
+  DOThreshold <- DO_Warm
+}
+else
+{
+  TempThreshold <- TempCold
+  DOThreshold <- DO_Cold
+}
+
 ## Making filepath and removing special characters 
-Filepath <- str_replace_all(string=HuronCleaned$station_name[row], pattern=" ", repl="")%>%
+Filepath <- str_replace_all(string=Stations$station_name[row], pattern=" ", repl="")%>%
             str_replace_all(., "[[:punct:]]", "")
 
-Filepath <- paste0(getwd(),"/Charts/",Filepath, "_", HuronStations$station_id[row])
+Filepath <- paste0(getwd(),"/Charts/",str_replace_all(Name, " ", "") ,"/",Filepath, "_", str_replace_all(Stations$station_id[row], " ", ""))
 
 #Making folder
 dir.create(file.path(Filepath), recursive = TRUE)
 
   ### Summary Table 
    print("Printing Summary Table")
-   TableMaker(ChartData,HuronStations$station_name[row], ThresholdList)%>%
+   TableMaker(ChartData,Stations$station_name[row], ThresholdList, Name)%>%
    gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
 
-  ## Boxplot 
-  ## TO DO: 
-  ## Loop over and create for every parameter OR 
-  ## Create array of box plots for each parameter 
+  ## Boxplot
+  ## TO DO:
+  ## Loop over and create for every parameter OR
+  ## Create array of box plots for each parameter
   print("Printing BoxPlots")
-  BoxPlot <- BoxPlotMaker(ChartData,HuronStations$station_name[row])
+  BoxPlot <- BoxPlotMaker(ChartData,Stations$station_name[row], Name)
   ggsave(paste0(Filepath, "/", "BoxPlot.png"), plot = BoxPlot, width = 25, height = 25, units = c("cm"), dpi = 300)
-  
+
   # ## Temperature Chart
+  ## Logic for Warm vs Cold !!
   print("Printing Temperature Charts")
-  Temp_Chart <- TempChartMaker(ChartData, HuronStations$station_name[row], TempCold)
+  Temp_Chart <- TempChartMaker(ChartData, Stations$station_name[row], TempThreshold, Name)
    ggsave(paste0(Filepath, "/", "Temp_Chart.png"), plot = Temp_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
 
   # ## DO Chart
-  ## Logic for handling Warm vs Cold !! 
+  ## Logic for handling Warm vs Cold !!
   print("Printing DO Charts")
-  DO_Chart <- DOChartMaker(ChartData, HuronStations$station_name[row],DO_Warm)
+  DO_Chart <- DOChartMaker(ChartData, Stations$station_name[row], DOThreshold, Name)
   ggsave(paste0(Filepath, "/", "DO_Chart.png"), plot = DO_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
 
   # ## Temp vs DO Chart
+  ## No data breaks this chart, adding check
+  if(all(!is.na(ChartData$`Water Temperature`)) | all(!is.na(ChartData$`Dissolved Oxygen`)))
+     {
   print("Printing Temp_DO_Chart")
-  Temp_DO_Chart <- Temp_DO_ChartMaker(ChartData, HuronStations$station_name[row])
+  Temp_DO_Chart <- Temp_DO_ChartMaker(ChartData, Stations$station_name[row], Name)
   ggsave(paste0(Filepath, "/", "Temp_DO_Chart.png"), plot = Temp_DO_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+    }
 
   # ## Temp vs pH Chart
-  print("Printing Temp_DO_Chart")
-  Temp_pH_Chart <- Temp_pH_ChartMaker(ChartData, HuronStations$station_name[row])
+  ## No data breaks this chart, adding check
+  if(all(!is.na(ChartData$`Water Temperature`)) & all(!is.na(ChartData$`pH`)))
+  {
+  print("Printing Temp_pH_Chart")
+  Temp_pH_Chart <- Temp_pH_ChartMaker(ChartData, Stations$station_name[row], Name)
   ggsave(paste0(Filepath, "/", "Temp_pH_Chart.png"), plot = Temp_pH_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+  }
 
   # ## Conductivity Timeseries
   print("Printing Conductivity Timeseries")
-  Cond_Chart <- CondChartMaker(ChartData, HuronStations$station_name[row], CondThreshold)
+  Cond_Chart <- CondChartMaker(ChartData, Stations$station_name[row], CondThreshold, Name)
   ggsave(paste0(Filepath, "/", "Cond_Chart.png"), plot = Cond_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-  
+
   print("Printing Conductivity BoxPlot ")
-  Cond_BoxPlot <- CondBoxplotMaker(ChartData, HuronStations$station_name[row],CondReference)
+  Cond_BoxPlot <- CondBoxplotMaker(ChartData, Stations$station_name[row],CondReference, Name)
   ggsave(paste0(Filepath, "/", "Cond_BoxPlot.png"), plot = Cond_BoxPlot, width = 25, height = 25, units = c("cm"), dpi = 300)
-  
+
   # ## pH Timeseries
   print("Printing pH_Chart")
-  pH_Chart <- pHChartMaker(ChartData, HuronStations$station_name[row], pHThreshold)
+  pH_Chart <- pHChartMaker(ChartData, Stations$station_name[row], pHThreshold, Name)
   ggsave(paste0(Filepath, "/", "pH_Chart.png"), plot = pH_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
 
   # ## TDS Timeseries
   print("Printing TDS_Chart")
-  TDS_Chart <- TDS_ChartMaker(ChartData, HuronStations$station_name[row], TDSThreshold)
+  TDS_Chart <- TDS_ChartMaker(ChartData, Stations$station_name[row], TDSThreshold, Name)
   ggsave(paste0(Filepath, "/", "TDS_Chart.png"), plot = TDS_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
 
   # ## Chloride Timeseries
   print("Printing Chloride_Chart")
-  Chloride_Chart <- Chloride_ChartMaker(ChartData, HuronStations$station_name[row], ChlorideThreshold)
+  Chloride_Chart <- Chloride_ChartMaker(ChartData, Stations$station_name[row], ChlorideThreshold, Name)
   ggsave(paste0(Filepath, "/", "Chloride_Chart.png"), plot = Chloride_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
 
   # ## Salinity Timeseries
   print("Printing Salinity_Chart")
-  Salinity_Chart <- Salinity_ChartMaker(ChartData, HuronStations$station_name[row])
+  Salinity_Chart <- Salinity_ChartMaker(ChartData, Stations$station_name[row], Name)
   ggsave(paste0(Filepath, "/", "Salinity_Chart.png"), plot = Salinity_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+
+ }
 }
-
-
-
 
 
 ### !!!! ### 
