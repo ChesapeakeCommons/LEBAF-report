@@ -63,23 +63,30 @@ ThresholdList <- list(DO_Cold,DO_Warm,TempWarm,TempCold,CondThreshold,pHThreshol
 HuronReference <- read_sheet(SheetURL, sheet = "HuronReference")%>%
                   select(-c(station_name))
 SUNYReference <- read_sheet(SheetURL, sheet = "SUNYReference")%>%
-                  select(-c(station_name))
+                 select(-c(station_name))
 DoanReference <- read_sheet(SheetURL, sheet = "DoanReference")%>%
-                  select(-c(station_name))
+                 select(-c(station_name))
 BuffaloReference <- read_sheet(SheetURL, sheet = "BuffaloNiagaraReference")%>%
-                  select(-c(station_name))
+                    select(-c(station_name))
 ClintonReference <- read_sheet(SheetURL, sheet = "ClintonReference")%>%
-                     select(-c(station_name))
+                    select(-c(station_name))
+MetroparksReference <- read_sheet(SheetURL, sheet = "ClevelandMetroparksReference")%>%
+                       select(-c(station_name))
+## Note that station ids do not match but station names do
+ErieReference <- read_sheet(SheetURL, sheet = "ErieSWCDReference")
 
 
 
 ## Importing Water Quality Data from Water Reporter ### 
 ## Step 2) and Step 3) 
-HuronRaw <- read.csv("Data/WaterReporterData2022/Huron_10_20_2022.csv")
-SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_10_27_2022.csv")
-DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_10_26_2022.csv")
-BuffaloRaw <- read.csv("Data/WaterReporterData2022/Buffalo_10_28_2022.csv")
+HuronRaw <- read.csv("Data/WaterReporterData2022/Huron_11_7_2022.csv")
+SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_11_7_2022.csv")
+DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_11_7_2022.csv")
+BuffaloRaw <- read.csv("Data/WaterReporterData2022/Buffalo_11_7_2022.csv")
 ClintonRaw <- read.csv("Data/WaterReporterData2022/ClintonWC_10_28_2022.csv")
+MetroparksRaw <- read.csv("Data/WaterReporterData2022/Metroparks_11_7_2022.csv")
+ErieRaw <- read.csv("Data/WaterReporterData2022/ErieSWCD_11_7_2022.csv")
+
 ### END DATA IMPORT ### 
 
 
@@ -97,7 +104,7 @@ ClintonRaw <- read.csv("Data/WaterReporterData2022/ClintonWC_10_28_2022.csv")
 
 ### Cleaning Huron Data ### 
 ## QA/QC Notes 
-## High DO and pH
+## High DO and low conductivity (sub <300)
 HuronCleaned <- HuronRaw %>%
                 dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3546.,
                        "Conductivity" = Conductivity..p.3545.,
@@ -108,14 +115,10 @@ HuronCleaned <- HuronRaw %>%
                 mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
                 mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
                 mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
                 filter(collection_date > ymd("2022-03-01"))%>%
                 filter(collection_date < ymd("2022-11-01"))%>%
-                left_join(HuronReference, by = "station_id")
-
-HuronStations <- HuronCleaned%>%
-                 select(station_name,station_id)%>%
-                 distinct(station_name, .keep_all = TRUE)
+                left_join(HuronReference, by = "station_id")%>%
+                filter(!is.na(Temp))
 
 ### Cleaning SUNY Data ###
 ## QA/QC Notes 
@@ -146,7 +149,6 @@ DoanCleaned <- DoanRaw %>%
                 mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
                 mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
                 mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
                 filter(collection_date > ymd("2022-03-01"))%>%
                 filter(collection_date < ymd("2022-11-01"))%>%
                 left_join(DoanReference, by = "station_id")%>%
@@ -154,43 +156,77 @@ DoanCleaned <- DoanRaw %>%
 
 ### Cleaning Buffalo Data ### 
 BuffaloCleaned <- BuffaloRaw %>%
-  dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3487.,
-                "Conductivity" = Conductivity..p.3486.,
-                "Water Temperature" = Temperature..water..p.3488.,
-                "pH" = pH..p.3485.)%>%
-  select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-  mutate(TDS = Conductivity*.55)%>%
-  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-  mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
-  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-  mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
-  filter(collection_date > ymd("2022-03-01"))%>%
-  filter(collection_date < ymd("2022-11-01"))%>%
-  left_join(BuffaloReference, by = "station_id")%>%
-  filter(!is.na(Temp))
+                  dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3487.,
+                                "Conductivity" = Conductivity..p.3486.,
+                                "Water Temperature" = Temperature..water..p.3488.,
+                                "pH" = pH..p.3485.)%>%
+                  select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+                  mutate(TDS = Conductivity*.55)%>%
+                  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+                  mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+                  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+                  filter(collection_date > ymd("2022-03-01"))%>%
+                  filter(collection_date < ymd("2022-11-01"))%>%
+                  left_join(BuffaloReference, by = "station_id")%>%
+                  filter(!is.na(Temp))
+
 
 ClintonCleaned <- ClintonRaw %>%
-dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3512.,
-              "Conductivity" = Conductivity..p.3511.,
-              "Water Temperature" = Temperature..water..p.3513.,
-              "pH" = pH..p.3510.)%>%
- select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-  mutate(TDS = Conductivity*.55)%>%
-  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-  mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
-  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-  mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > 25, NA,`Dissolved Oxygen`))%>%
-  filter(collection_date > ymd("2022-03-01"))%>%
-  filter(collection_date < ymd("2022-11-01"))%>%
-  left_join(ClintonReference, by = "station_id")%>%
-  filter(!is.na(Temp))
+                dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3512.,
+                              "Conductivity" = Conductivity..p.3511.,
+                              "Water Temperature" = Temperature..water..p.3513.,
+                              "pH" = pH..p.3510.)%>%
+                 select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+                 mutate(TDS = Conductivity*.55)%>%
+                 mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+                 mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+                 mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+                 filter(collection_date > ymd("2022-03-01"))%>%
+                 filter(collection_date < ymd("2022-11-01"))%>%
+                 left_join(ClintonReference, by = "station_id")%>%
+                 filter(!is.na(Temp))
 
+MetroparksCleaned <- MetroparksRaw %>%
+                dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3492.,
+                "Conductivity" = Conductivity..p.3491.,
+                "Water Temperature" = Temperature..water..p.3493.,
+                "pH" = pH..p.3490.)%>%
+                select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+                mutate(TDS = Conductivity*.55)%>%
+                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+                mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+                filter(collection_date > ymd("2022-03-01"))%>%
+                filter(collection_date < ymd("2022-11-01"))%>%
+                left_join(MetroparksReference, by = "station_id")%>%
+                filter(!is.na(Temp))
+
+ErieCleaned <- ErieRaw %>%
+              dplyr::rename("Dissolved Oxygen" = Dissolved.Oxygen..p.3337.,
+                            "Conductivity" = Conductivity..p.3336.,
+                            "Water Temperature" = Temperature..p.3355.,
+                            "pH" = pH..p.3356.)%>%
+              select(c("collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_name"))%>%
+              mutate(TDS = Conductivity*.55)%>%
+              mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+              mutate(Chloride = ((Conductivity / 1000) * 4.928)*100)%>%
+              mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+              filter(collection_date > ymd("2022-03-01"))%>%
+              filter(collection_date < ymd("2022-11-01"))%>%
+              left_join(ErieReference, by = "station_name")%>%
+              filter(!is.na(Temp))
 
 ## Step 4)
 ## Creating Array of Group Data ##
 ## !! The GroupDataSource List and GroupName var need to be the same group order !! 
-GroupDatasource <- list(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned, ClintonCleaned)
-GroupName <- c("Huron River Watershed Council", "SUNY Fredonia", "Doan Brook Watershed Partnership","Buffalo Niagara Waterkeeper", "Clinton River Watershed Council")
+GroupDatasource <- list(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned, ClintonCleaned, MetroparksCleaned, ErieCleaned)
+GroupName <- c("Huron River Watershed Council", 
+               "SUNY Fredonia", 
+               "Doan Brook Watershed Partnership",
+               "Buffalo Niagara Waterkeeper", 
+               "Clinton River Watershed Council", 
+               "Cleveland Metroparks",
+               "Erie Soil and Water Conservation District")
 GroupData <- data.frame(GroupName)
 GroupData$GroupDatasource <- GroupDatasource
 
@@ -258,7 +294,6 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
   }
   
   ## Joining in Water Thresholds 
-  ## TO DO: Add logic for Warm vs Cold Water
   WaterThreshold <- TempThreshold %>%
                     mutate(Month = month(Month))
   
@@ -267,7 +302,7 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
     select(c(`Water Temperature`,collection_date))%>%
     mutate(Month = month(collection_date))%>%
     left_join(WaterThreshold)%>%
-    mutate(Water_Ex = ifelse(`Water Temperature` > LowerBound & `Water Temperature` < UpperBound,0,1))%>%
+    mutate(Water_Ex = ifelse(`Water Temperature` < Value,0,1))%>%
     pull(Water_Ex)
   
   ## All other vars and pulling in Water Exceedence
@@ -359,14 +394,22 @@ BoxPlotMaker <- function(df,inStation_name, Name)
 TempChartMaker <- function(inGroup_data, inStation_name, inTresholds, Name)
 {
   
-  ChartData <- inGroup_data 
+  TempThreshold <- inTresholds %>%
+       mutate(Month = month(Month))
+  
+  ChartData <- inGroup_data %>%
+    mutate(Month = month(collection_date))%>%
+    left_join(TempThreshold)%>%
+    mutate(Color = "Poor")%>%
+    mutate(Color = ifelse(`Water Temperature` < as.numeric(Value), "Good", Color))%>% ## Good 
+    filter(!is.na(`Water Temperature`))
+  
+  Colors <- c("Poor" = "#f53e46", "Good" = "#1aaf54")
   
   plot <-  ggplot()+
-    geom_line(data = inTresholds, aes(x = Month, y = LowerBound, color = "#0533ff"))+
-    geom_line(data = inTresholds, aes(x = Month, y = UpperBound,color =  "#fc090a"), key_glyph = "rect")+
-    geom_ribbon(data = inTresholds, aes(x = Month, ymin=LowerBound,ymax=UpperBound), fill="#1aaf54", alpha=0.25)+
-    scale_color_manual(name = "", values=c('Threshold'='#1aaf54'))+
-    geom_point(data = ChartData, aes(x=collection_date, y =`Water Temperature`), shape = 21, fill = "#b3b3b3", size = 3)+
+    geom_line(data = inTresholds, aes(x = Month, y = Value), color = "#1aaf54", linetype = "dashed", show.legend = F)+
+    geom_point(data = ChartData, aes(x=collection_date, y =`Water Temperature`, color = factor(Color)), size = 3)+
+    scale_color_manual(name = "Thresholds", values=Colors)+
     theme_classic()+
     ylab("Water Temperature C")+
     xlab("")+
@@ -379,7 +422,7 @@ TempChartMaker <- function(inGroup_data, inStation_name, inTresholds, Name)
   return(plot)
 }
 
-#TempChartMaker(DoanCleaned %>% filter(station_name =="Rockefeller Lagoon" ), "RL", TempWarm, "Test")
+#TempChartMaker(HuronCleaned %>% filter(station_name == "Michigan Avenue" ),"Michigan Avenue", TempWarm, "Test")
 
 ### END TEMP CHART ### 
 ## Threshold Charts ##
@@ -570,7 +613,7 @@ plot <-  ggplot() +
   }
 
 ## Testing 
-#CondBoxplotMaker(HuronCleaned %>% filter(station_name == "Broadway St."), "Broadway St.",CondReference)
+#CondBoxplotMaker(ErieCleaned %>% filter(station_name == "Strecker Rd"), "Strecker Rd",CondReference,"Test")
 
 
 ## PH ## 
@@ -732,7 +775,7 @@ print(Stations$station_name[row])
 ChartData <- Datasource %>%
              filter(station_name == Stations$station_name[row])%>%
              filter(collection_date > ymd("2022-03-01"))%>%
-             filter(collection_date < ymd("2022-11-01")) 
+             filter(collection_date < ymd("2022-11-01"))
 
 ### Warm vs. Cold Thresholds Logic ##   
 StreamTemp <- ChartData %>%
