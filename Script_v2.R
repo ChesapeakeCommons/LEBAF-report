@@ -19,6 +19,9 @@ library(plyr)
 library(lubridate)
 library(stringr)
 library(webshot2)
+library(ggformula)
+library(viridis)
+
 
 ### Fetching Data Source Data from Google Sheets ### 
 gs4_deauth()
@@ -70,7 +73,7 @@ ErieReference <- read_sheet(SheetURL, sheet = "ErieSWCDReference")
 ## Importing Water Quality Data from Water Reporter ### 
 ## Step 2) and Step 3) 
 HuronRaw <- read.csv("Data/WaterReporterData2022/Huron_11_7_2022.csv")
-SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_11_7_2022.csv")
+SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_11_8_2022.csv")
 DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_11_7_2022.csv")
 BuffaloRaw <- read.csv("Data/WaterReporterData2022/Buffalo_11_7_2022.csv")
 ClintonRaw <- read.csv("Data/WaterReporterData2022/ClintonWC_10_28_2022.csv")
@@ -246,11 +249,12 @@ GroupData <- data.frame(GroupName)
 GroupData$GroupDatasource <- GroupDatasource
 
 ## Binding all data for River Summary
-AllGroupData <- rbind(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned,ClintonCleaned,MetroparksCleaned,ErieCleaned)%>%
-                filter(!is.na(Basin))
+AllGroupData <- rbind(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned,ClintonCleaned,MetroparksCleaned,ErieCleaned)
 
 ## Getting list of unique basins 
-Basins <- unique(AllGroupData$Basin)
+Basins <- AllGroupData %>%
+          filter(!is.na(Basin))%>%
+          distinct(Basin)
             
 
 ### END DATA CLEANING ### 
@@ -400,7 +404,6 @@ BoxPlotMaker <- function(df,inStation_name, Name)
    
     return(plot)
 }
-
 #BoxPlotMaker(HuronCleaned,"Shetland Dr.")
 
 ## END BOX AND WHISKER ## 
@@ -436,7 +439,6 @@ TempChartMaker <- function(inGroup_data, inStation_name, inTresholds, Name)
   
   return(plot)
 }
-
 #TempChartMaker(HuronCleaned %>% filter(station_name == "Michigan Avenue" ),"Michigan Avenue", TempWarm, "Test")
 
 ### END TEMP CHART ### 
@@ -467,7 +469,6 @@ DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data, Name)
   
   return(plot)
 }
-
 #DOChartMaker(HuronCleaned %>% filter(station_name == "N. Territorial Rd."), "N. Territorial Rd.",DO_Warm, "Nick Conklin")
 ### END DISSOLVED OXYGEN ### 
 
@@ -505,7 +506,6 @@ plot <-  ggplot(data = ChartData, aes(x = collection_date))+
 
   return(plot)
 }
-
 #Temp_DO_ChartMaker(BuffaloCleaned %>% filter(station_id == "OH05"), "Outer Harbor @ Wilkeson Point", Name)
 ### End Temperature and Dissolved Oxygen  ### 
 
@@ -542,7 +542,6 @@ Temp_pH_ChartMaker <- function(inGroup_data, inStation_name, Name)
          subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)))
   return(plot)
 }
-
 #Temp_pH_ChartMaker(HuronCleaned, "Broadway St.")
 ### End Temperature and pH ### 
 
@@ -578,7 +577,6 @@ CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 
    return(plot)
   }
-
 ## Testing 
 #CondChartMaker(HuronCleaned, "N. Territorial Rd.", CondThreshold)
 ## End Conductivity 
@@ -624,7 +622,6 @@ plot <-  ggplot() +
   
   
   }
-
 ## Testing 
 #CondBoxplotMaker(ErieCleaned %>% filter(station_name == "Strecker Rd"), "Strecker Rd",CondReference,"Test")
 
@@ -658,7 +655,6 @@ pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
   return(plot)
   
 }
-
 ## Testing ## 
 #pHChartMaker(HuronCleaned, "Shetland Dr.", pHThreshold)
 ## End pH ##
@@ -693,10 +689,8 @@ TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 
   return(plot)
 }
-
 ## Testing ## 
 #TDS_ChartMaker(HuronCleaned, "Broadway St.", TDSThreshold)
-
 ## End TDS ##
 
 
@@ -729,10 +723,8 @@ Chloride_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, N
     
   return(plot)
 }
-
 ## Testing ## 
 #Chloride_ChartMaker(HuronCleaned, "Broadway St.", ChlorideThreshold)
-
 ### End Chloride ###
 
 
@@ -754,16 +746,34 @@ Salinity_ChartMaker <- function(inGroup_data, inStation_name, Name)
   
   return(plot)
 }
-
 ## Testing ## 
 #Salinity_ChartMaker(HuronCleaned, "Broadway St.")
 ### End Salinity ### 
 
+#### Basin Level Charts ####
+Basin_ChartMaker <- function(inBasinData, inBasinName,c)
+{
 
+ParameterName <- str_replace(colnames(inBasinData)[c],"[.]", " ") 
+  
+ChartData <- inBasinData %>%
+             dplyr::rename(Values = c)
 
+plot <- ggplot(ChartData, aes(x=collection_date, y=Values, color=as.factor(station_name)))+
+    geom_smooth(se = FALSE)+
+    geom_point(shape = 20, size = 3)+
+    scale_color_viridis(discrete = TRUE, option = "D")+
+    labs(color = "Stations")+
+    ylab(ParameterName)+
+    xlab("")+
+    labs(title = paste(inBasinName, ParameterName, "Summary"),
+       subtitle = paste("Data from:", min(ChartData$collection_date), "to",max(ChartData$collection_date)))+
+    theme_classic()+
+    theme(plot.title = element_text(size=22))
+
+return(plot)
+}
 #### END VISUALIZATIONS ###
-
-
 
 #### GENERATING STATION LEVEL CHARTS #### 
 ## Looping over stations ## 
@@ -810,7 +820,7 @@ else
 Filepath <- str_replace_all(string=Stations$station_name[row], pattern=" ", repl="")%>%
             str_replace_all(., "[[:punct:]]", "")
 
-Filepath <- paste0(getwd(),"/Charts/",str_replace_all(Name, " ", "") ,"/",Filepath, "_", str_replace_all(Stations$station_id[row], " ", ""))
+Filepath <- paste0(getwd(),"/Charts/Groups/",str_replace_all(Name, " ", "") ,"/",Filepath, "_", str_replace_all(Stations$station_id[row], " ", ""))
 
 #Making folder
 dir.create(file.path(Filepath), recursive = TRUE)
@@ -889,26 +899,46 @@ dir.create(file.path(Filepath), recursive = TRUE)
 
 
 #### GENERATING RIVER LEVEL CHARTS #### 
-for(i in 1:length(Basins))
+for(i in 1:nrow(Basins))
 {
-  Filepath <- str_replace_all(string=Basins[i], pattern=" ", repl="")%>%
+  Filepath <- str_replace_all(string=Basins$Basin[i], pattern=" ", repl="")%>%
     str_replace_all(., "[[:punct:]]", "")  
   
-  Filepath <- paste0(getwd(),"/Charts/",Filepath)
+  Filepath <- paste0(getwd(),"/Charts/Basins/",Filepath)
   
   dir.create(file.path(Filepath), recursive = TRUE)
   
   BasinData <- AllGroupData %>%
-               filter(Basin == Basins[i])
-
-print("Printing Summary Table")
-TableMaker(BasinData,Basins[i], ThresholdList, "")%>%
-gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
+               filter(Basin == Basins$Basin[i])
+  
+  MonthlyAveragesStations <- BasinData %>%
+    group_by(collection_date,station_name)%>%
+    summarize_if(is.numeric,mean, na.rm = TRUE)%>%
+    data.frame()
+    
+  ## Loops through every column EXCEPT the first two, collection_date and station_id, additional text columns will break this loop!
+  for(c in 3:ncol(MonthlyAveragesStations))
+  {
+  ParameterName <- str_replace(colnames(MonthlyAveragesStations)[c],"[.]", " ") 
+  Basin_Chart <- Basin_ChartMaker(MonthlyAveragesStations,Basins$Basin[i],c)
+  ggsave(paste0(Filepath, "/", str_replace(ParameterName," ",""), "_Chart.png"), plot = Basin_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+  }
+  
+  print("Printing Summary Table")
+  TableMaker(BasinData,Basins$Basin[i], ThresholdList, "")%>%
+  gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
 
 }
 
-
-
+#### GENERATING FULL DATA CHARTS #### 
+# Filepath <- paste0(getwd(),"/Charts/FullData/")
+# 
+# dir.create(file.path(Filepath), recursive = TRUE)
+# 
+#   print("Printing Summary Table")
+#   TableMaker(AllGroupData, "LEBAF",ThresholdList, "")%>%
+#   gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
+# 
 
 
 ### !!!! ### 
