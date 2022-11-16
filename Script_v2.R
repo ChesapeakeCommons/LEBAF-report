@@ -1,5 +1,5 @@
 ## LEBAF Data Reporting Workflow ##
-## Created for Lake Erie Basin Assesment Framework ## 
+## Created for Lake Erie Basin Assessment Framework ## 
 ## Created by Gabriel Watson 10.18.22 ## 
 ## Pulls LEBAF downloaded data from WaterReporter and Threshold data
 ## from googlesheets to generate a series of report ready charts ## 
@@ -103,6 +103,11 @@ TinkersRaw <- read.csv("Data/WaterReporterData2022/Tinkers_11_14_2022.csv")
 ## Calculating Chloride ## 
 ## Turning date into date format 
 
+ErieStations <- ErieRaw %>%
+                distinct(station_name,station_id, latitude,longitude)%>%
+                arrange(station_name)
+            
+write.csv(ErieStations, "ErieWaterReporterStations_v1.csv")
 
 ## Conversion function for Conductivity to Chloride
 CondChlorideConvert <- function(inBasin,Value)
@@ -281,8 +286,11 @@ Basins <- AllGroupData %>%
           filter(!is.na(Basin))%>%
           distinct(Basin)
             
-
 ### END DATA CLEANING ### 
+
+
+
+
 
 
 
@@ -364,10 +372,23 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
                  select(c(DO_Ex,Water_Ex,Cond_Ex,TDS_Ex,pH_Ex,Chloride_Ex,Salinity_Ex))%>%
                  summarise_all(.,~sum(.x,na.rm = TRUE))
   
+  DO_Ex <- sum(!is.na(df$`Dissolved Oxygen`))
+  Water_Ex <- sum(!is.na(df$`Water Temperature`))
+  Cond_Ex <- sum(!is.na(df$Conductivity))
+  TDS_Ex <- sum(!is.na(df$TDS))
+  pH_Ex <- sum(!is.na(df$pH))
+  Chloride_Ex <- sum(!is.na(df$Chloride))
+  Salinity_Ex <- sum(!is.na(df$Salinity))
+  
+  SampleCount <- c(DO_Ex, Water_Ex, Cond_Ex, TDS_Ex, pH_Ex, Chloride_Ex, Salinity_Ex)
+  
+  ExceedTable <- rbind(ExceedTable,SampleCount)
+
   ## a little cleaning 
   ExceedTable <- as.data.frame(t(ExceedTable))%>%
                  dplyr::rename(NumExceed = V1)%>%
-                 mutate(PerExceed = as.character(round(NumExceed / nrow(df),3)*100))
+                 mutate(PerExceed = as.character(round(NumExceed / V2,3)*100))%>%
+                select(-c(V2))
   
   ## Adding units 
   df <- df %>%
@@ -404,7 +425,7 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
   return(Table)
 }
 
-#Table <- TableMaker(HuronCleaned %>% filter(station_name == "Michigan Avenue"),"Michigan Avenue", ThresholdList, "Name")
+#Table <- TableMaker(ClintonCleaned %>% filter(station_name == "Paint Creek 1"),"Paint Creek 1", ThresholdList, "Name")
 ### END TABLES ### 
 
 ## Box and Whisker ## 
@@ -846,6 +867,18 @@ MapMaker <- function(inData,inName, inThresholds, Labels)
     dplyr::mutate(count = n()) %>% 
     unique()
   
+  SampleCount <- df %>%
+    select(c(`Dissolved Oxygen`,Conductivity,`Water Temperature`, pH, TDS, Salinity, Chloride, station_id))%>%
+    group_by(station_id)%>%
+    summarise_all(funs(sum(!is.na(.))))
+  
+    colnames(SampleCount) <- paste(colnames(SampleCount), "Count", sep = "_")
+  
+    SampleCount <- SampleCount  %>%
+                  dplyr::rename("station_id" = station_id_Count)
+    
+    print(SampleCount)
+  
   ## All other vars and pulling in Water Exceedence
   MapData <- df %>%
     select(c(`Dissolved Oxygen`,Conductivity,`Water Temperature`, pH, TDS, Salinity, Chloride, station_id))%>%
@@ -859,9 +892,18 @@ MapMaker <- function(inData,inName, inThresholds, Labels)
     group_by(station_id)%>%
     summarise_all(.,~sum(.x,na.rm = TRUE))%>%
     left_join(Stations)%>%
-    mutate_at(vars(2:7), funs(round(./count,3)*100))%>%
+    left_join(SampleCount)%>%
+    mutate(`Dissolved Oxygen` = round(`Dissolved Oxygen`/`Dissolved Oxygen_Count`, 3)*100)%>%
+    mutate(Conductivity = round(Conductivity/Conductivity_Count, 3)*100)%>%
+    mutate(`Water Temperature` = round(`Water Temperature`/`Water Temperature_Count`, 3)*100)%>%
+    mutate(pH = round(pH/pH_Count, 3)*100)%>%
+    mutate(TDS = round(TDS/TDS_Count, 3)*100)%>%
+    mutate(Salinity = round(Salinity/Salinity_Count, 3)*100)%>%
+    mutate(Chloride = round(Chloride/Chloride_Count, 3)*100)%>%
+    select(-c(`Dissolved Oxygen_Count`,Conductivity_Count,`Water Temperature_Count`, pH_Count, TDS_Count, Salinity_Count, Chloride_Count))%>%
     relocate(c(station_id,count,latitude,longitude))
   
+
   Maps <- list()
   
   for(c in 5:ncol(MapData))
@@ -895,7 +937,7 @@ MapMaker <- function(inData,inName, inThresholds, Labels)
   return(Maps)
 }
 
-#Maps <- MapMaker(AllGroupData %>% filter(Basin == "Huron"),"Test",ThresholdList, F)
+#Maps <- MapMaker(AllGroupData %>% filter(Basin == "Huron"),"Test",ThresholdList, T)
 
 #### GENERATING STATION LEVEL CHARTS #### 
 ## Looping over stations ## 
