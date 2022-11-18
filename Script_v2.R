@@ -1,9 +1,50 @@
 ## LEBAF Data Reporting Workflow ##
 ## Created for Lake Erie Basin Assessment Framework ## 
 ## Created by Gabriel Watson 10.18.22 ## 
-## Pulls LEBAF downloaded data from WaterReporter and Threshold data
-## from googlesheets to generate a series of report ready charts ## 
-## This represents a first pass for review on Wednesday 10.26.22 w/ LEBAF ## 
+## This represents a feature complete script for generating station, river, and full erie basin charts as of 11.17.2022 ## 
+
+## Running the Script: ## 
+## - The script will run from top to bottom to produce all charts ## 
+## - To run a specific level: Run from data import to end of visualizations, run ggplot_Printer, and then run desired level ## 
+## - To update source data: Swap out file handle in GroupNameRaw for new data stored in WaterReporterDataXXXX
+## - To alter thresholds, chart colors, or reference sheets: See the reference sheet: https://docs.google.com/spreadsheets/d/1zrSc_Cd2-V1k73lE3TrqX-QqYJkt117AMAb-O-kuhsA/edit#gid=585756641
+## - Possible errors: 
+##   - 'Error in s$close() : attempt to apply non-function'
+##       - This stems from the gtsave function which utlizies webshot2
+##              - Patch: Clear environment, restart R, reinstall webshot2 - install.packages("webshot2"), and re run program 
+##              - Permanent fix: Replace gt table with a ggplot table 
+##  - Chart level errors: Below each visualization is a commented out call for testing a particular viz - use the print outs to idenitify the problem data, and test
+
+## Script Sections ## 
+## Data Import ## 
+##  - Google Sheets 
+##      - Threshold Data 
+##      - Reference Sheets 
+##  - Group Data
+## Data Cleaning ## 
+##  - Variable Harmonizing 
+##  - TDS, Salinity, and Chloride Conversion 
+##  - Combining into GroupData and AllGroupData 
+## Visualizations 
+##  - Summary Table and supporting TableMaker function 
+##  - Boxplot
+##  - Temperature Chart 
+##  - Dissolved Oxygen 
+##  - Temperature and Dissolved Oxygen 
+##  - Temperature and pH 
+##  - Conductivity 
+##  - Conductivity Boxplot 
+##  - pH 
+##  - TDS 
+##  - Chloride 
+##  - Salinity 
+##  - River Basin line charts 
+##  - River basin and Lake erie basin Map 
+## Outputs 
+##  - Ggplot printer helper function 
+##  - Station level
+##  - River basin level 
+##  - Full lake erie 
 
 
 library(tibble)
@@ -29,6 +70,10 @@ library(leaflet.extras2)
 library(mapview)
 library(htmltools)
 
+
+
+### DATA IMPORT ### 
+
 ### Fetching Data Source Data from Google Sheets ### 
 gs4_deauth()
 SheetURL <- "https://docs.google.com/spreadsheets/d/1zrSc_Cd2-V1k73lE3TrqX-QqYJkt117AMAb-O-kuhsA"
@@ -52,13 +97,12 @@ ThresholdList <- list(DO_Cold,DO_Warm,TempWarm,TempCold,CondThreshold,pHThreshol
 ## Pulling in Station Reference Data ##
 ## 1) Add reference sheet !! Please follow formatting !! - stored in this gsheet - "https://docs.google.com/spreadsheets/d/1zrSc_Cd2-V1k73lE3TrqX-QqYJkt117AMAb-O-kuhsA" 
 ## 2) Download data from Water Reporter and store in /Data/ of working directory Folder 
-## 3) Add Import 
-## 4) Add Cleaning Section 
-## 5) Add Group name and dataframe to GroupData 
-## 6) Run full scropt (ctrl A and click 'Run')
+##     !! Please maintain file naming convention GroupShortName_XX_XX_XXXX.csv XX_XX_XXX = Date Downloaded 
+##     Add read.csv call 
+## 3) Add Cleaning Section 
+## 4) Add Group name and data to GroupData 
 
-## Adding refernce data 
-## Step 1) 
+## 1) Adding reference data 
 HuronReference <- read_sheet(SheetURL, sheet = "HuronReference")%>%
                        select(-c(station_name))
 SUNYReference <- read_sheet(SheetURL, sheet = "SUNYReference")%>%
@@ -71,15 +115,13 @@ ClintonReference <- read_sheet(SheetURL, sheet = "ClintonReference")%>%
                        select(-c(station_name))
 MetroparksReference <- read_sheet(SheetURL, sheet = "ClevelandMetroparksReference")%>%
                        select(-c(station_name))
-## Note that station ids do not match but station names do
-ErieReference <- read_sheet(SheetURL, sheet = "ErieSWCDReference")
+ErieReference <- read_sheet(SheetURL, sheet = "ErieSWCDReference")%>%
+                       select(-c(station_name))
 
 TinkersReference <- read_sheet(SheetURL, sheet = "TinkersReference")%>%
                     select(-c(station_name))
 
-
-## Importing Water Quality Data from Water Reporter ### 
-## Step 2) and Step 3) 
+## 2) Importing Data from Water Reporter ### 
 HuronRaw <- read.csv("Data/WaterReporterData2022/Huron_11_10_2022.csv")
 SUNYRaw <- read.csv("Data/WaterReporterData2022/SUNY_11_8_2022.csv")
 DoanRaw <- read.csv("Data/WaterReporterData2022/Doan_11_7_2022.csv")
@@ -88,183 +130,73 @@ ClintonRaw <- read.csv("Data/WaterReporterData2022/ClintonWC_10_28_2022.csv")
 MetroparksRaw <- read.csv("Data/WaterReporterData2022/Metroparks_11_7_2022.csv")
 ErieRaw <- read.csv("Data/WaterReporterData2022/ErieSWCD_11_7_2022.csv")
 TinkersRaw <- read.csv("Data/WaterReporterData2022/Tinkers_11_14_2022.csv")
+
 ### END DATA IMPORT ### 
 
 
 ### DATA CLEANING #### 
-## Step 3) 
-## The only thing to change is the 'left_join' at the end, and the exact parameter column names for the rename Tip: type colnames(DataRaw)
-## Cleaning Data ## 
-## Changing annoying column stuff ## 
-## Notes 
-##  - Conductivity is in uS/cm - microsiemens per centimeter
-## Calculating TDS ##
-## Calculating Salinity ## 
-## Calculating Chloride ## 
-## Turning date into date format 
-
-ErieStations <- ErieRaw %>%
-                distinct(station_name,station_id, latitude,longitude)%>%
-                arrange(station_name)
-            
-write.csv(ErieStations, "ErieWaterReporterStations_v1.csv")
-
 ## Conversion function for Conductivity to Chloride
 CondChlorideConvert <- function(inBasin,Value)
 {
-if(inBasin %in% CondClorideConversion$Basin)
-{
-Convert <- CondClorideConversion %>%
-          filter(inBasin == Basin)
-
-Chloride <- 10 ^ (Convert$Var1 + (Convert$Var2*log10(Value)))
-}
-else
-{
-Chloride <- ((Value / 1000) * 4.928)*100
-}
+  if(inBasin %in% CondClorideConversion$Basin)
+  {
+    Convert <- CondClorideConversion %>%
+      filter(inBasin == Basin)
+    
+    Chloride <- 10 ^ (Convert$Var1 + (Convert$Var2*log10(Value)))
+  }
+  else
+  {
+    Chloride <- ((Value / 1000) * 4.928)*100
+  }
 }
 CondChlorideConvertVect <- Vectorize(CondChlorideConvert)
 
-### Cleaning Huron Data ### 
-## QA/QC Notes 
-## High DO and low conductivity (sub <300)
-HuronCleaned <- HuronRaw %>%
-                dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3546.,
-                       "Conductivity" = Conductivity..p.3545.,
-                       "Water Temperature" = Temperature..water..p.3547.,
-                       "pH" = pH..p.3544.)%>%
-                select(c("latitude","longitude", "collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                mutate(TDS = Conductivity*.55)%>%
-                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                filter(collection_date > ymd("2022-03-01"))%>%
-                filter(collection_date < ymd("2022-11-01"))%>%
-                left_join(HuronReference, by = "station_id")%>%
-                filter(!is.na(Temp))%>%
-                mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
 
-### Cleaning SUNY Data ###
-## QA/QC Notes 
-## High DO and low Conductivity (TDS, Salinity, Chloride by extension)
-SUNYCleaned <- SUNYRaw %>% 
-                dplyr::rename("Dissolved Oxygen" = Dissolved.Oxygen..p.1523.,
-                              "Conductivity" = Conductivity..p.3431.,
-                              "Water Temperature" = Water.Temperature..p.1521.,
-                              "pH" = pH..p.1522.)%>%
-                select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                mutate(TDS = Conductivity*.55)%>%
-                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                filter(collection_date > ymd("2022-03-01"))%>%
-                filter(collection_date < ymd("2022-11-01"))%>%
-                left_join(SUNYReference, by = "station_id")%>%
-                filter(!is.na(Temp))%>%
-                mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
+## Function for Cleaning Data 
+DataCleaner <- function(Data, Reference, DO, Cond, Temp, pH)
+    {
+    DataCleaned <- Data %>%
+     dplyr::rename("Dissolved Oxygen" = DO,
+                    "Conductivity" = Cond,
+                    "Water Temperature" = Temp,
+                    "pH" = pH)%>%
+      select(c("latitude","longitude", "collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
+      mutate(TDS = Conductivity*.55)%>%
+      mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
+      mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
+      filter(collection_date > ymd("2022-03-01"))%>%
+      filter(collection_date < ymd("2022-11-01"))%>%
+      left_join(Reference, by = "station_id")%>%
+      filter(!is.na(Temp))%>%
+      mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
+    
+    return(DataCleaned)
+}
 
+## 3) Cleaning Data 
+HuronCleaned <- DataCleaner(HuronRaw,HuronReference,"Dissolved.oxygen..DO...p.3546.","Conductivity..p.3545.","Temperature..water..p.3547.","pH..p.3544.")
+SUNYCleaned <- DataCleaner(SUNYRaw,SUNYReference,"Dissolved.Oxygen..p.1523.","Conductivity..p.3431.","Water.Temperature..p.1521.","pH..p.1522.")
+DoanCleaned <- DataCleaner(DoanRaw,DoanReference,"Dissolved.oxygen..DO...p.3502.","Conductivity..p.3501.","Temperature..water..p.3503.","pH..p.3500.")
+BuffaloCleaned <- DataCleaner(BuffaloRaw,BuffaloReference,"Dissolved.oxygen..DO...p.3487.","Conductivity..p.3486.","Temperature..water..p.3488.","pH..p.3485.")
+ClintonCleaned <- DataCleaner(ClintonRaw,ClintonReference,"Dissolved.oxygen..DO...p.3512.","Conductivity..p.3511.","Temperature..water..p.3513.","pH..p.3510.")
+MetroparksCleaned <- DataCleaner(MetroparksRaw,MetroparksReference,"Dissolved.oxygen..DO...p.3492.","Conductivity..p.3491.","Temperature..water..p.3493.","pH..p.3490.")
+ErieCleaned <- DataCleaner(ErieRaw,ErieReference,"Dissolved.Oxygen..p.3337.","Conductivity..p.3336.","Temperature..p.3355.","pH..p.3356.")
+TinkersCleaned <- DataCleaner(TinkersRaw,TinkersReference,"Dissolved.oxygen..DO...p.3522.","Conductivity..p.3521.","Temperature..water..p.3523.","pH..p.3520.")
 
-### Cleaning Doan Data ### 
-DoanCleaned <- DoanRaw %>%
-               dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3502.,
-                "Conductivity" = Conductivity..p.3501.,
-                "Water Temperature" = Temperature..water..p.3503.,
-                "pH" = pH..p.3500.)%>%
-                select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                mutate(TDS = Conductivity*.55)%>%
-                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                filter(collection_date > ymd("2022-03-01"))%>%
-                filter(collection_date < ymd("2022-11-01"))%>%
-                left_join(DoanReference, by = "station_id")%>%
-                filter(!is.na(Temp))%>%
-                mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-
-### Cleaning Buffalo Data ### 
-BuffaloCleaned <- BuffaloRaw %>%
-                  dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3487.,
-                                "Conductivity" = Conductivity..p.3486.,
-                                "Water Temperature" = Temperature..water..p.3488.,
-                                "pH" = pH..p.3485.)%>%
-                  select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                  mutate(TDS = Conductivity*.55)%>%
-                  mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                  mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                  filter(collection_date > ymd("2022-03-01"))%>%
-                  filter(collection_date < ymd("2022-11-01"))%>%
-                  left_join(BuffaloReference, by = "station_id")%>%
-                  filter(!is.na(Temp))%>%
-                  mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-
-
-ClintonCleaned <- ClintonRaw %>%
-                dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3512.,
-                              "Conductivity" = Conductivity..p.3511.,
-                              "Water Temperature" = Temperature..water..p.3513.,
-                              "pH" = pH..p.3510.)%>%
-                 select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                 mutate(TDS = Conductivity*.55)%>%
-                 mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                 mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                 filter(collection_date > ymd("2022-03-01"))%>%
-                 filter(collection_date < ymd("2022-11-01"))%>%
-                 left_join(ClintonReference, by = "station_id")%>%
-                 filter(!is.na(Temp))%>%
-                 mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-
-MetroparksCleaned <- MetroparksRaw %>%
-                dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3492.,
-                "Conductivity" = Conductivity..p.3491.,
-                "Water Temperature" = Temperature..water..p.3493.,
-                "pH" = pH..p.3490.)%>%
-                select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-                mutate(TDS = Conductivity*.55)%>%
-                mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-                mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-                filter(collection_date > ymd("2022-03-01"))%>%
-                filter(collection_date < ymd("2022-11-01"))%>%
-                left_join(MetroparksReference, by = "station_id")%>%
-                filter(!is.na(Temp))%>%
-                mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-
-ErieCleaned <- ErieRaw %>%
-              dplyr::rename("Dissolved Oxygen" = Dissolved.Oxygen..p.3337.,
-                            "Conductivity" = Conductivity..p.3336.,
-                            "Water Temperature" = Temperature..p.3355.,
-                            "pH" = pH..p.3356.)%>%
-              select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_name"))%>%
-              mutate(TDS = Conductivity*.55)%>%
-              mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-              mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-              filter(collection_date > ymd("2022-03-01"))%>%
-              filter(collection_date < ymd("2022-11-01"))%>%
-              left_join(ErieReference, by = "station_name")%>%
-              filter(!is.na(Temp))%>%
-              mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-TinkersCleaned <- TinkersRaw %>%
-              dplyr::rename("Dissolved Oxygen" = Dissolved.oxygen..DO...p.3522.,
-                            "Conductivity" = Conductivity..p.3521.,
-                            "Water Temperature" = Temperature..water..p.3523.,
-                            "pH" = pH..p.3520.)%>%
-              select(c("latitude","longitude","collection_date","Dissolved Oxygen","Conductivity","Water Temperature","pH","station_id","station_name"))%>%
-              mutate(TDS = Conductivity*.55)%>%
-              mutate(Salinity = (Conductivity^1.0878)*.4665)%>%
-              mutate(collection_date = ymd(substr(collection_date,1,10)))%>%
-              filter(collection_date > ymd("2022-03-01"))%>%
-              filter(collection_date < ymd("2022-11-01"))%>%
-              left_join(TinkersReference, by = "station_id")%>%
-              filter(!is.na(Temp))%>%
-              mutate(Chloride = CondChlorideConvertVect(Basin,Conductivity))
-
-
-## Step 4)
-## Creating Array of Group Data ##
+## 4) Creating Array of Group Data ##
 ## !! The GroupDataSource List and GroupName var need to be the same group order !! 
-GroupDatasource <- list(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned, ClintonCleaned, MetroparksCleaned, ErieCleaned, TinkersCleaned)
+## Group Data
+GroupDatasource <- list(HuronCleaned,
+                        SUNYCleaned,
+                        DoanCleaned,
+                        BuffaloCleaned, 
+                        ClintonCleaned, 
+                        MetroparksCleaned, 
+                        ErieCleaned, 
+                        TinkersCleaned)
+
+## Group Names
 GroupName <- c("Huron River Watershed Council", 
                "SUNY Fredonia", 
                "Doan Brook Watershed Partnership",
@@ -274,24 +206,20 @@ GroupName <- c("Huron River Watershed Council",
                "Erie Soil and Water Conservation District", 
                "Tinkers Creek Watershed Partners")
 
+## Combing into array of GroupNames and GroupDatasources 
 GroupData <- data.frame(GroupName)
-
 GroupData$GroupDatasource <- GroupDatasource
 
-## Binding all data for River Summary
+## Binding all data for River Summary and Basin Summary
 AllGroupData <- rbind(HuronCleaned,SUNYCleaned,DoanCleaned,BuffaloCleaned,ClintonCleaned,MetroparksCleaned,ErieCleaned, TinkersCleaned)
 
 ## Getting list of unique basins 
 Basins <- AllGroupData %>%
           filter(!is.na(Basin))%>%
           distinct(Basin)
-            
+
+## End data combining  ## 
 ### END DATA CLEANING ### 
-
-
-
-
-
 
 
 #### VIZUALIZATIONS #### 
@@ -358,6 +286,9 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
     mutate(Water_Ex = ifelse(`Water Temperature` < Value,0,1))%>%
     pull(Water_Ex)
   
+  #print(df)
+  print(as.numeric(inThresholds[[6]][1,2]))
+  print(as.numeric(inThresholds[[6]][3,2]))
   ## All other vars and pulling in Water Exceedence
   ExceedTable <- df %>%
                 select(-c(collection_date,station_id,station_name))%>%
@@ -371,6 +302,7 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
                  mutate(Salinity_Ex = NA)%>%
                  select(c(DO_Ex,Water_Ex,Cond_Ex,TDS_Ex,pH_Ex,Chloride_Ex,Salinity_Ex))%>%
                  summarise_all(.,~sum(.x,na.rm = TRUE))
+  
   
   DO_Ex <- sum(!is.na(df$`Dissolved Oxygen`))
   Water_Ex <- sum(!is.na(df$`Water Temperature`))
@@ -425,7 +357,7 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
   return(Table)
 }
 
-#Table <- TableMaker(ClintonCleaned %>% filter(station_name == "Paint Creek 1"),"Paint Creek 1", ThresholdList, "Name")
+Table <- TableMaker(MetroparksCleaned %>% filter(station_name == "Schaefer Park"),"Schaefer Park", ThresholdList, "Name")
 ### END TABLES ### 
 
 ## Box and Whisker ## 
@@ -676,7 +608,6 @@ plot <-  ggplot() +
 ## Testing 
 #CondBoxplotMaker(TinkersCleaned %>% filter(station_name == "Broadway Trailhead"), "Broadway Trailhead",CondReference,"Test")
 
-
 ## PH ## 
 pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 {
@@ -709,7 +640,6 @@ pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
 ## Testing ## 
 #pHChartMaker(HuronCleaned, "Shetland Dr.", pHThreshold)
 ## End pH ##
-
 
 ## TDS ## 
 TDS_ChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
@@ -824,8 +754,8 @@ plot <- ggplot(ChartData, aes(x=collection_date, y=Values, color=as.factor(stati
 
 return(plot)
 }
-#### END VISUALIZATIONS ###
 
+#### Maps for Rivers and Full data ###
 MapMaker <- function(inData,inName, inThresholds, Labels)
 {
   
@@ -876,10 +806,8 @@ MapMaker <- function(inData,inName, inThresholds, Labels)
   
     SampleCount <- SampleCount  %>%
                   dplyr::rename("station_id" = station_id_Count)
-    
-    print(SampleCount)
   
-  ## All other vars and pulling in Water Exceedence
+  ## All other vars and pulling in Water Excedence
   MapData <- df %>%
     select(c(`Dissolved Oxygen`,Conductivity,`Water Temperature`, pH, TDS, Salinity, Chloride, station_id))%>%
     mutate(`Dissolved Oxygen` = ifelse(`Dissolved Oxygen` > as.numeric(DOThreshold[1,2]),0,1)) %>% 
@@ -936,11 +864,22 @@ MapMaker <- function(inData,inName, inThresholds, Labels)
   
   return(Maps)
 }
-
 #Maps <- MapMaker(AllGroupData %>% filter(Basin == "Huron"),"Test",ThresholdList, T)
+### End Maps ### 
+
+#### END VISUALIZATIONS ###
+
+##### OUTPUTS #### 
+
+## Function for printing GGplot charts 
+ggplot_Printer <- function(Chart, Filepath)
+{
+  ChartName <- deparse(substitute(Chart))
+  Filepath <- paste0(Filepath, "/",ChartName,".png")
+  ggsave(Filepath, plot = Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+}
 
 #### GENERATING STATION LEVEL CHARTS #### 
-## Looping over stations ## 
 for (row in 1:nrow(GroupData))
 {
 Datasource <- as.data.frame(GroupData$GroupDatasource[row])
@@ -955,14 +894,12 @@ Stations <-  Datasource %>%
 
 for (row in 1:nrow(Stations))
  {
-  
-print(Stations$station_name[row])
-  
+PrintName <- paste(Name, ":", Stations$station_name[row])
+print(PrintName)
+
 ## Selecting to the chart data we need 
 ChartData <- Datasource %>%
-             filter(station_name == Stations$station_name[row])%>%
-             filter(collection_date > ymd("2022-03-01"))%>%
-             filter(collection_date < ymd("2022-11-01"))
+             filter(station_name == Stations$station_name[row])
 
 ### Warm vs. Cold Thresholds Logic ##   
 StreamTemp <- ChartData %>%
@@ -989,77 +926,77 @@ Filepath <- paste0(getwd(),"/Charts/Groups/",str_replace_all(Name, " ", "") ,"/"
 #Making folder
 dir.create(file.path(Filepath), recursive = TRUE)
 
-  ### Summary Table 
-   print("Printing Summary Table")
+  ### Summary Table
+   print(paste0(PrintName,  ": Summary Table"))
    TableMaker(ChartData,Stations$station_name[row], ThresholdList, Name)%>%
    gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
 
   ## Boxplot
-  print("Printing BoxPlots")
-  BoxPlot <- BoxPlotMaker(ChartData,Stations$station_name[row], Name)
-  ggsave(paste0(Filepath, "/", "BoxPlot.png"), plot = BoxPlot, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  print(paste0(PrintName,  ": Box_Plot"))
+  Box_Plot <- BoxPlotMaker(ChartData,Stations$station_name[row], Name)
+  ggplot_Printer(Box_Plot,Filepath)
+  
   # ## Temperature Chart
   ## Logic for Warm vs Cold !!
-  print("Printing Temperature Charts")
+  print(paste0(PrintName,  ": Temp_Chart"))
   Temp_Chart <- TempChartMaker(ChartData, Stations$station_name[row], TempThreshold, Name)
-   ggsave(paste0(Filepath, "/", "Temp_Chart.png"), plot = Temp_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(Temp_Chart,Filepath)
+  
   # ## DO Chart
   ## Logic for handling Warm vs Cold !!
-  print("Printing DO Charts")
+  print(paste0(PrintName,  ": DO_Chart"))
   DO_Chart <- DOChartMaker(ChartData, Stations$station_name[row], DOThreshold, Name)
-  ggsave(paste0(Filepath, "/", "DO_Chart.png"), plot = DO_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(DO_Chart,Filepath)
+  
   # ## Temp vs DO Chart
   ## No data breaks this chart, adding check
   if(all(!is.na(ChartData$`Water Temperature`)) | all(!is.na(ChartData$`Dissolved Oxygen`)))
-     {
-  print("Printing Temp_DO_Chart")
-  Temp_DO_Chart <- Temp_DO_ChartMaker(ChartData, Stations$station_name[row], Name)
-  ggsave(paste0(Filepath, "/", "Temp_DO_Chart.png"), plot = Temp_DO_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-    }
-
+  {
+    print(paste0(PrintName,  ": Temp_DO_Chart"))
+    Temp_DO_Chart <- Temp_DO_ChartMaker(ChartData, Stations$station_name[row], Name)
+    ggplot_Printer(Temp_DO_Chart,Filepath)
+  }
+  
   # ## Temp vs pH Chart
-  ## No data breaks this chart, adding check
   if(all(!is.na(ChartData$`Water Temperature`)) & all(!is.na(ChartData$`pH`)))
   {
-  print("Printing Temp_pH_Chart")
-  Temp_pH_Chart <- Temp_pH_ChartMaker(ChartData, Stations$station_name[row], Name)
-  ggsave(paste0(Filepath, "/", "Temp_pH_Chart.png"), plot = Temp_pH_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+    print(paste0(PrintName,  ": Temp_pH_Chart"))
+    Temp_pH_Chart <- Temp_pH_ChartMaker(ChartData, Stations$station_name[row], Name)
+    ggplot_Printer(Temp_pH_Chart,Filepath)
   }
-
+  
   # ## Conductivity Timeseries
-  print("Printing Conductivity Timeseries")
+  print(paste0(PrintName,  ": Cond_Chart"))
   Cond_Chart <- CondChartMaker(ChartData, Stations$station_name[row], CondThreshold, Name)
-  ggsave(paste0(Filepath, "/", "Cond_Chart.png"), plot = Cond_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
-  print("Printing Conductivity BoxPlot ")
+  ggplot_Printer(Cond_Chart,Filepath)
+  
+  print(paste0(PrintName,  ": Cond_BoxPlot"))
   Cond_BoxPlot <- CondBoxplotMaker(ChartData, Stations$station_name[row],CondReference, Name)
-  ggsave(paste0(Filepath, "/", "Cond_BoxPlot.png"), plot = Cond_BoxPlot, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(Cond_BoxPlot,Filepath)
+  
   # ## pH Timeseries
-  print("Printing pH_Chart")
+  print(paste0(PrintName,  ": pH_Chart"))
   pH_Chart <- pHChartMaker(ChartData, Stations$station_name[row], pHThreshold, Name)
-  ggsave(paste0(Filepath, "/", "pH_Chart.png"), plot = pH_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(pH_Chart,Filepath)
+  
   # ## TDS Timeseries
-  print("Printing TDS_Chart")
+  print(paste0(PrintName,  ": TDS_Chart"))
   TDS_Chart <- TDS_ChartMaker(ChartData, Stations$station_name[row], TDSThreshold, Name)
-  ggsave(paste0(Filepath, "/", "TDS_Chart.png"), plot = TDS_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(TDS_Chart,Filepath)
+  
   # ## Chloride Timeseries
-  print("Printing Chloride_Chart")
+  print(paste0(PrintName,  ": Chloride_Chart"))
   Chloride_Chart <- Chloride_ChartMaker(ChartData, Stations$station_name[row], ChlorideThreshold, Name)
-  ggsave(paste0(Filepath, "/", "Chloride_Chart.png"), plot = Chloride_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
+  ggplot_Printer(Chloride_Chart,Filepath)
+  
   # ## Salinity Timeseries
-  print("Printing Salinity_Chart")
+  print(paste0(PrintName,  ": Salinity_Chart"))
   Salinity_Chart <- Salinity_ChartMaker(ChartData, Stations$station_name[row], Name)
-  ggsave(paste0(Filepath, "/", "Salinity_Chart.png"), plot = Salinity_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
+  ggplot_Printer(Salinity_Chart,Filepath)
 
  }
 }
+#### END STATION LEVEL CHARTS #### 
 
 
 #### GENERATING RIVER LEVEL CHARTS #### 
@@ -1074,9 +1011,7 @@ for(i in 1:nrow(Basins))
   
   BasinData <- AllGroupData %>%
                filter(Basin == Basins$Basin[i])
-  
 
-  
   ### Maps ### 
   Maps <- MapMaker(BasinData, Basins$Basin[i] ,ThresholdList, T)
   
@@ -1090,21 +1025,23 @@ for(i in 1:nrow(Basins))
   ## Loops through every column EXCEPT the first two, collection_date and station_id, additional text columns will break this loop!
   for(c in 3:ncol(MonthlyAveragesStations))
   {
-    
   ParameterName <- str_replace(colnames(MonthlyAveragesStations)[c],"[.]", " ") 
-  Basin_Chart <- Basin_ChartMaker(MonthlyAveragesStations,Basins$Basin[i],c)
-  ggsave(paste0(Filepath, "/", str_replace(ParameterName," ",""), "_Chart.png"), plot = Basin_Chart, width = 25, height = 25, units = c("cm"), dpi = 300)
-
   
+  print(paste0(Basins$Basin[i], ": ", ParameterName))
+  Basin_Chart <- Basin_ChartMaker(MonthlyAveragesStations,Basins$Basin[i],c)
+  ggplot_Printer(Salinity_Chart,Filepath)
+
   ## Printing Maps 
   Map <- Maps[[c + 2]]
   mapshot(Map, file = paste0(Filepath, "/", str_replace(ParameterName," ",""), "_Map.png"),  vwidth = 1080, vheight = 1080)
   }
   
-  print("Printing Summary Table")
+  print(paste0(Basins$Basin[i], ": ", ParameterName, " Summary Table"))
   TableMaker(BasinData,Basins$Basin[i], ThresholdList, "")%>%
   gtsave(filename = paste0(Filepath, "/", "Summary_Table.png"), expand = 5)
 }
+#### END RIVER LEVEL CHARTS #### 
+
 
 #### GENERATING FULL DATA CHARTS #### 
 Filepath <- paste0(getwd(),"/Charts/LakeErieBasin/")
@@ -1125,7 +1062,7 @@ dir.create(file.path(Filepath), recursive = TRUE)
     gtsave(filename = paste0(Filepath, "/", "Warm_Summary_Table.png"), expand = 5)
     
     MapsWarm <- MapMaker(AllGroupDataWarm,"Lake Erie Basin Warm Water",ThresholdList, F)
-    MapsCold <- MapMaker(AllGroupDataCold %>% filter(station_id != "PC1"),"Lake Erie Basin Cold Water",ThresholdList, T)
+    MapsCold <- MapMaker(AllGroupDataCold,"Lake Erie Basin Cold Water",ThresholdList, F)
     
     for(c in 3:ncol(MonthlyAveragesStations))
     {
@@ -1136,11 +1073,11 @@ dir.create(file.path(Filepath), recursive = TRUE)
     mapshot(MapWarm, file = paste0(Filepath, "/", str_replace(ParameterName," ",""), "_Warm_Map.png"),  vwidth = 1080, vheight = 1080)
     mapshot(MapCold, file = paste0(Filepath, "/", str_replace(ParameterName," ",""), "_Cold_Map.png"),  vwidth = 1080, vheight = 1080)
     }
-    
-    
-    
 
-### !!!! ### 
+#### END FULL DATA CHARTS #### 
+    
+#### END OUTPUTS ###
+
 
 
 
