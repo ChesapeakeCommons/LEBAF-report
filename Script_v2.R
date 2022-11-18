@@ -1,7 +1,9 @@
 ## LEBAF Data Reporting Workflow ##
 ## Created for Lake Erie Basin Assessment Framework ## 
 ## Created by Gabriel Watson 10.18.22 ## 
-## This represents a feature complete script for generating station, river, and full erie basin charts as of 11.17.2022 ## 
+## This represents a feature complete script for generating station, river, and full Erie basin charts as of 11.18.2022 ## 
+## README: https://docs.google.com/document/d/1gywbUJOj4AbRX4ddL6mHgEskxm-bbdKKrpe32ke8Mb8/edit
+
 
 ## Running the Script: ## 
 ## - The script will run from top to bottom to produce all charts ## 
@@ -14,6 +16,7 @@
 ##              - Patch: Clear environment, restart R, reinstall webshot2 - install.packages("webshot2"), and re run program 
 ##              - Permanent fix: Replace gt table with a ggplot table 
 ##  - Chart level errors: Below each visualization is a commented out call for testing a particular viz - use the print outs to idenitify the problem data, and test
+
 
 ## Script Sections ## 
 ## Data Import ## 
@@ -45,7 +48,6 @@
 ##  - Station level
 ##  - River basin level 
 ##  - Full lake erie 
-
 
 library(tibble)
 library(gtable)
@@ -117,7 +119,6 @@ MetroparksReference <- read_sheet(SheetURL, sheet = "ClevelandMetroparksReferenc
                        select(-c(station_name))
 ErieReference <- read_sheet(SheetURL, sheet = "ErieSWCDReference")%>%
                        select(-c(station_name))
-
 TinkersReference <- read_sheet(SheetURL, sheet = "TinkersReference")%>%
                     select(-c(station_name))
 
@@ -147,11 +148,12 @@ CondChlorideConvert <- function(inBasin,Value)
   }
   else
   {
-    Chloride <- ((Value / 1000) * 4.928)*100
+    Chloride <- Value * 4.928
   }
 }
-CondChlorideConvertVect <- Vectorize(CondChlorideConvert)
 
+# Vectorizing the Cond to chloride conversion so we can use it in the function below 
+CondChlorideConvertVect <- Vectorize(CondChlorideConvert)
 
 ## Function for Cleaning Data 
 DataCleaner <- function(Data, Reference, DO, Cond, Temp, pH)
@@ -286,13 +288,9 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
     mutate(Water_Ex = ifelse(`Water Temperature` < Value,0,1))%>%
     pull(Water_Ex)
   
-  #print(df)
-  print(as.numeric(inThresholds[[6]][1,2]))
-  print(as.numeric(inThresholds[[6]][3,2]))
   ## All other vars and pulling in Water Exceedence
   ExceedTable <- df %>%
                 select(-c(collection_date,station_id,station_name))%>%
-                ## Temp warm vs Temp Cold logic here ## 
                  mutate(DO_Ex = ifelse(`Dissolved Oxygen` > as.numeric(DOThreshold[1,2]),0,1)) %>% 
                  mutate(Cond_Ex = ifelse(Conductivity < as.numeric(inThresholds[[5]][1,2]) & Conductivity > as.numeric(inThresholds[[5]][3,2]),0,1))%>%
                  mutate(Water_Ex = Water_Ex)%>%
@@ -357,7 +355,7 @@ TableMaker <- function(df, inStation_name, inThresholds, Name)
   return(Table)
 }
 
-Table <- TableMaker(MetroparksCleaned %>% filter(station_name == "Schaefer Park"),"Schaefer Park", ThresholdList, "Name")
+#Table <- TableMaker(MetroparksCleaned %>% filter(station_name == "Schaefer Park"),"Schaefer Park", ThresholdList, "Name")
 ### END TABLES ### 
 
 ## Box and Whisker ## 
@@ -404,7 +402,6 @@ TempChartMaker <- function(inGroup_data, inStation_name, inThresholds, Name)
     mutate(Color = "Poor")%>%
     mutate(Color = ifelse(`Water Temperature` < as.numeric(Value), "Good", Color))%>% ## Good 
     filter(!is.na(`Water Temperature`))
-  
   
   Colors <- c("Poor" = "#f53e46", "Good" = "#1aaf54")
   
@@ -453,7 +450,7 @@ DOChartMaker <- function(inGroup_data, inStation_name, inThreshold_data, Name)
   
   return(plot)
 }
-#DOChartMaker(HuronCleaned %>% filter(station_name == "N. Territorial Rd."), "N. Territorial Rd.",DO_Warm, "Nick Conklin")
+#DOChartMaker(HuronCleaned %>% filter(station_name == "N. Territorial Rd."), "N. Territorial Rd.",DO_Warm, "Test")
 ### END DISSOLVED OXYGEN ### 
 
 
@@ -462,8 +459,6 @@ Temp_DO_ChartMaker <- function(inGroup_data, inStation_name, Name)
 {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>% 
-    filter(collection_date > ymd("2022-03-01"))%>%
-    filter(collection_date < ymd("2022-11-01"))%>%
     filter(!is.na(`Water Temperature`))%>%
     filter(!is.na(`Dissolved Oxygen`))
 
@@ -499,8 +494,6 @@ Temp_pH_ChartMaker <- function(inGroup_data, inStation_name, Name)
 {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>% 
-    filter(collection_date > ymd("2022-03-01"))%>%
-    filter(collection_date < ymd("2022-11-01"))%>%
     filter(!is.na(`Water Temperature`))%>%
     filter(!is.na(pH))
   
@@ -536,8 +529,6 @@ CondChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
    {
   ChartData <- inGroup_data %>%
     filter(station_name == inStation_name) %>%
-    filter(collection_date > ymd("2022-03-01"))%>%
-    filter(collection_date < ymd("2022-11-01"))%>%
     mutate(Color = as.character(inThreshold_data[2,1]))%>%
     mutate(Color = ifelse(Conductivity > as.numeric(inThreshold_data[1,2]), as.character(inThreshold_data[1,1]),Color))%>% ## High 
     mutate(Color = ifelse(Conductivity < as.numeric(inThreshold_data[3,2]), as.character(inThreshold_data[3,1]), Color))%>% ## Low 
@@ -576,12 +567,12 @@ CondBoxplotMaker <- function(inGroup_data, inStation_name, inThreshold_data,Name
   ## Getting the correct conductivity reference - Again, I know there is a better way to do this, will improve later ## 
   CondRefBox <- ChartData %>%
                 filter(StreamType == "Reference")%>%
-                select(c(StreamType, x25, x50, x75, x90, x95))%>%
+                select(c(StreamType, xMin, x25, x50, x75, xMax))%>%
                 distinct(.,.keep_all = TRUE)
   
   CondSurvBox <- ChartData %>%
                 filter(StreamType == "Survey")%>%
-                select(c(StreamType, x25, x50, x75, x90, x95))%>%
+                select(c(StreamType, xMin, x25, x50, x75, xMax))%>%
                 distinct(.,.keep_all = TRUE)%>%
                 rbind(CondRefBox)
 Legend <- c("Reference" = "#0098d8","Survey" = "#1aaf54")
@@ -591,7 +582,7 @@ StreamType <- c("Reference","Survey")
 CondMedianChart <- data.frame(CondMedian,StreamType)
 
 plot <-  ggplot() +
-              geom_boxplot(data = CondSurvBox,  aes(x = StreamType, ymin = 400, lower = x25, middle = x50,upper = x75, ymax = x90, fill = StreamType), stat = "identity")+              
+              geom_boxplot(data = CondSurvBox,  aes(x = StreamType, ymin = xMin, lower = x25, middle = x50,upper = x75, ymax = xMax, fill = StreamType), stat = "identity")+              
               geom_point(data = ChartData, aes(y=Conductivity, x = StreamType), size = 3, color = "Black")+
               geom_point(data = CondMedianChart, aes(y=CondMedian, x = StreamType), size = 4, color = "#f53e46")+
               labs(title = paste(Name, inStation_name, "Conductivity and Control Sites"),
@@ -602,11 +593,9 @@ plot <-  ggplot() +
               scale_fill_manual(values = Legend)
   
   return(plot)
-  
-
   }
 ## Testing 
-#CondBoxplotMaker(TinkersCleaned %>% filter(station_name == "Broadway Trailhead"), "Broadway Trailhead",CondReference,"Test")
+CondBoxplotMaker(TinkersCleaned %>% filter(station_name == "Broadway Trailhead"), "Broadway Trailhead",CondReference,"Test")
 
 ## PH ## 
 pHChartMaker <- function(inGroup_data, inStation_name,inThreshold_data, Name)
